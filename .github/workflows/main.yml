@@ -72,8 +72,8 @@ jobs:
             Send-Log "Configuring Ngrok Authtoken..."
             ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
-            Send-Log "Starting Ngrok TCP Tunnel..."
-            Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389"
+            Send-Log "Starting serveo TCP Tunnel..."
+            Start-Process -FilePath "serveo" -ArgumentList "tcp 3389"
             Start-Sleep -Seconds 10
 
             $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
