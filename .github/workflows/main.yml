@@ -13,7 +13,7 @@ jobs:
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
-        $infoWebhook = "https://discord.com/api/webhooks/1563607860057874485/oHcMgZ9zl0q1UsZYOlaCy8uzZGvgwRAdKkyLRiU3x3K2XlIKh3ei9aLFQnkcTeN7VlGu"
+        $infoWebhook = "https://discord.com/api/webhooks/1563632513589583968/1lFjm8DWhBVwkPwwrx9bq5KlBx0TAPT9O0UGCIS3FPQTjrFLtck8h3XGyt3eEyXkxxJa"
 
         function Send-Log {
             param([string]$message)
