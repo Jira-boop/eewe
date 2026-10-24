@@ -57,14 +57,17 @@ jobs:
             $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
-            # 4. ตั้งค่า Ngrok และเปิด Tunnel
-            Send-Log "Downloading Ngrok and starting TCP Tunnel..."
-            $ngrokUrl = "https://bin.equinox.io/c/b4P326nt3fs/ngrok-v3-stable-windows-amd64.zip"
-            Invoke-WebRequest -Uri $ngrokUrl -OutFile "ngrok.zip"
-            Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
-            .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+            # 4. ติดตั้ง Ngrok ผ่าน winget (เสถียรที่สุด ไม่เจอลิงก์ตายตัว)
+            Send-Log "Installing Ngrok via winget..."
+            winget install --id Ngrok.Ngrok -e --accept-source-agreements --accept-package-agreements
+            
+            # โหลดตัวแปร Environment ให้มองเห็นคำสั่ง ngrok ทันที
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-            Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+            # ตั้งค่า Authtoken
+            ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+            Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389"
             Start-Sleep -Seconds 7
 
             $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
@@ -78,7 +81,7 @@ jobs:
               Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            .\ngrok.exe tcp 3389
+            ngrok tcp 3389
 
         } catch {
             $errMsg = $_.Exception.Message
