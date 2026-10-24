@@ -15,7 +15,8 @@ jobs:
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
         $infoWebhook = "https://discord.com/api/webhooks/1563607860057874485/oHcMgZ9zl0q1UsZYOlaCy8uzZGvgwRAdKkyLRiU3x3K2XlIKh3ei9aLFQnkcTeN7VlGu"
 
-        function Send-Log($message) {
+        function Send-Log {
+            param([string]$message)
             if ($logWebhook) {
                 $body = @{ content = $message } | ConvertTo-Json
                 try { 
@@ -25,10 +26,10 @@ jobs:
         }
 
         try {
-            Send-Log "🚀 **[LOG]** เริ่มต้นกระบวนการตั้งค่า Windows RDP..."
+            Send-Log "Starting Windows RDP setup process..."
 
             # 1. ตั้งค่า RDP
-            Send-Log "⚙️ กำลังเปิดใช้งาน Remote Desktop และสร้างผู้ใช้..."
+            Send-Log "Enabling Remote Desktop and creating user..."
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
             Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
             secedit /export /cfg C:\secpol.cfg
@@ -38,7 +39,7 @@ jobs:
             net localgroup administrators jira_zx /add
 
             # 2. ติดตั้ง Java 25
-            Send-Log "☕ กำลังดาวน์โหลดและติดตั้ง Java 25..."
+            Send-Log "Downloading and installing Java 25..."
             $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.exe"
             $javaMsi = "$env:TEMP\jdk25.exe"
             Invoke-WebRequest -Uri $javaUrl -OutFile $javaMsi
@@ -48,7 +49,7 @@ jobs:
             [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
 
             # 3. ติดตั้ง MEGA Desktop
-            Send-Log "☁️ กำลังดาวน์โหลดและติดตั้ง MEGA Desktop App..."
+            Send-Log "Downloading and installing MEGA Desktop App..."
             $megaUrl = "https://mega.nz/MEGAsyncSetup64.exe"
             $megaInstaller = "$env:TEMP\MEGAsyncSetup.exe"
             Invoke-WebRequest -Uri $megaUrl -OutFile $megaInstaller
@@ -57,43 +58,30 @@ jobs:
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
             # 4. ตั้งค่า Ngrok และเปิด Tunnel
-            Send-Log "🌐 กำลังดาวน์โหลด Ngrok และสร้าง TCP Tunnel..."
+            Send-Log "Downloading Ngrok and starting TCP Tunnel..."
             $ngrokUrl = "https://bin.equinox.io/c/b4P326nt3fs/ngrok-v3-stable-windows-amd64.zip"
             Invoke-WebRequest -Uri $ngrokUrl -OutFile "ngrok.zip"
             Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
             .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
-            # รัน Ngrok เบื้องหลังเพื่อดึง IP
             Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
             Start-Sleep -Seconds 7
 
             $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
             $ngrokIp = $ngrokApi.tunnels[0].public_url -replace "tcp://", ""
 
-            Send-Log "✅ **[LOG]** ติดตั้งทุกอย่างสำเร็จเรียบร้อย!"
+            Send-Log "Setup completed successfully!"
 
-            # ส่งข้อมูลรหัสเข้า Discord ห้องที่ 2 (Info)
             if ($infoWebhook) {
-              $msg = @"
-🎮 **Windows RDP พร้อมใช้งานแล้ว!**
-----------------------------------
-📌 **IP / Address:** `$ngrokIp`
-👤 **Username:** `jira_zx`
-🔑 **Password:** `123789`
-📧 **MEGA Account:** `jirawatkaewninta@gmail.com`
-----------------------------------
-⏱️ **ใช้งานได้สูงสุด:** 6 ชั่วโมง
-"@
+              $msg = "Windows RDP is ready!`nIP: $ngrokIp`nUser: jira_zx`nPass: 123789"
               $bodyInfo = @{ content = $msg } | ConvertTo-Json
               Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            # คงสถานะ Ngrok ไว้
             .\ngrok.exe tcp 3389
 
         } catch {
-            $errLine = $_.InvocationInfo.ScriptLineNumber
             $errMsg = $_.Exception.Message
-            Send-Log "❌ **[ERROR]** เกิดข้อผิดพลาดในสคริปต์!`n📌 **รายละเอียด:** `$errMsg`"
+            Send-Log "ERROR occurred: $errMsg"
             throw $_
         }
