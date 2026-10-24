@@ -57,8 +57,8 @@ jobs:
             $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
-            - name: เชื่อมต่อ RDP ผ่าน Serveo (TCP Tunnel)
-       run: |
+    - name: เชื่อมต่อ RDP ผ่าน Serveo (TCP Tunnel)
+     run: |
         Write-Host "=========================================="
         Write-Host "Username: jira_zx"
         Write-Host "Password: 123789"
