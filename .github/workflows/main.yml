@@ -68,21 +68,15 @@ jobs:
         
         ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
             }
-
-            Send-Log "Configuring Ngrok Authtoken..."
-            ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-
+            
             Send-Log "Starting serveo TCP Tunnel..."
             Start-Process -FilePath "serveo" -ArgumentList "tcp 3389"
             Start-Sleep -Seconds 10
 
-            $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
-            $ngrokIp = $ngrokApi.tunnels[0].public_url -replace "tcp://", ""
-
             Send-Log "Setup completed successfully!"
 
             if ($infoWebhook) {
-              $msg = "Windows RDP is ready!`nIP: $ngrokIp`nUser: jira_zx`nPass: 123789"
+              $msg = "Windows RDP is ready!`nIP: $serveoIp`nUser: jira_zx`nPass: 123789"
               $bodyInfo = @{ content = $msg } | ConvertTo-Json
               Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
