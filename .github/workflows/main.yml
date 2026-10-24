@@ -57,18 +57,22 @@ jobs:
             $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
-            # 4. ดาวน์โหลดและตั้งค่า Ngrok แบบตรง
-            Send-Log "Downloading Ngrok..."
-            $ngrokUrl = "https://bin.equinox.io/c/b4P326nt3fs/ngrok-v3-stable-windows-amd64.zip"
-            Invoke-WebRequest -Uri $ngrokUrl -OutFile "ngrok.zip"
-            Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
+            # 4. ติดตั้ง Ngrok ผ่านตัวจัดการทางการของ Windows (หลบปัญหาลิงก์ตาย 404)
+            Send-Log "Installing Ngrok via winget..."
+            winget install --id Ngrok.Ngrok -e --accept-source-agreements --accept-package-agreements --silent
+            
+            # รีเฟรช Path ในสคริปต์เพื่อให้เรียกคำสั่ง ngrok ได้ทันที
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+            if (!(Get-Command ngrok -ErrorAction SilentlyContinue)) {
+                $env:Path += ";C:\Program Files\ngrok"
+            }
 
             Send-Log "Configuring Ngrok Authtoken..."
-            .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+            ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
             Send-Log "Starting Ngrok TCP Tunnel..."
-            Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
-            Start-Sleep -Seconds 8
+            Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389"
+            Start-Sleep -Seconds 10
 
             $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
             $ngrokIp = $ngrokApi.tunnels[0].public_url -replace "tcp://", ""
@@ -81,7 +85,7 @@ jobs:
               Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            .\ngrok.exe tcp 3389
+            ngrok tcp 3389
 
         } catch {
             $errMsg = $_.Exception.Message
