@@ -64,12 +64,12 @@ jobs:
             Write-Host "=========================================="
             Write-Host "กำลังเชื่อมต่อ Serveo..."
             
-            # รัน SSH แบบ Background เพื่อให้สคริปต์ส่ง Webhook ต่อได้ทันที
+            # ใส่ -T เพื่อไม่ให้ SSH เรียกหา TTY
             $sshJob = Start-Job -ScriptBlock {
-                ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+                ssh -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
             }
 
-            # หน่วงเวลาเล็กน้อยให้เชื่อมต่อสำเร็จ
+            # หน่วงเวลาเล็กน้อยให้การเชื่อมต่อเริ่มต้น
             Start-Sleep -Seconds 5
             
             Send-Log "Setup completed successfully!"
