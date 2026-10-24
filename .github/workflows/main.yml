@@ -67,3 +67,15 @@ jobs:
         Write-Host "กำลังเชื่อมต่อ Serveo..."
         
         ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+        Send-Log "Setup completed successfully!"
+
+            if ($infoWebhook) {
+              $msg = "Windows RDP is ready!`nIP: $ngrokIp`nUser: jira_zx`nPass: 123789"
+              $bodyInfo = @{ content = $msg } | ConvertTo-Json
+              Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+              
+            catch {
+            $errMsg = $_.Exception.Message
+            Send-Log "ERROR occurred: $errMsg"
+            throw $_
+        }
