@@ -9,74 +9,91 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: ตั้งค่าระบบ RDP และสร้างยูสเซอร์
+    - name: รันระบบทั้งหมดพร้อมระบบแยกแจ้งเตือน Error และ Success
+      shell: pwsh
       run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        
-        # ปิดนโยบายความซับซ้อนรหัสผ่าน
-        secedit /export /cfg C:\secpol.cfg
-        (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
-        secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
-        
-        # สร้างผู้ใช้ jira_zx / 123789
-        net user jira_zx "123789" /add
-        net localgroup administrators jira_zx /add
+        $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
+        $infoWebhook = "https://discord.com/api/webhooks/1563607860057874485/oHcMgZ9zl0q1UsZYOlaCy8uzZGvgwRAdKkyLRiU3x3K2XlIKh3ei9aLFQnkcTeN7VlGu"
 
-    - name: ติดตั้ง Java 25
-      run: |
-        Write-Host "กำลังดาวน์โหลดและติดตั้ง Java 25 (JDK)..."
-        $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.exe"
-        $javaMsi = "$env:TEMP\jdk25.exe"
-        Invoke-WebRequest -Uri $javaUrl -OutFile $javaMsi
-        Start-Process -FilePath $javaMsi -ArgumentList "/s" -Wait
-        
-        # ตั้งค่า Environment Variable สำหรับ Java
-        [Environment]::SetEnvironmentVariable("JAVA_HOME", "C:\Program Files\Java\jdk-25", "Machine")
-        $env:Path += ";C:\Program Files\Java\jdk-25\bin"
-        [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
-        Write-Host "ติดตั้ง Java 25 สำเร็จ!"
-
-    - name: ติดตั้ง MEGA Desktop App
-      run: |
-        Write-Host "กำลังดาวน์โหลด MEGA Desktop App..."
-        $megaUrl = "https://mega.nz/MEGAsyncSetup64.exe"
-        $megaInstaller = "$env:TEMP\MEGAsyncSetup.exe"
-        Invoke-WebRequest -Uri $megaUrl -OutFile $megaInstaller
-        
-        Write-Host "กำลังติดตั้ง MEGAsync..."
-        Start-Process -FilePath $megaInstaller -ArgumentList "/S" -Wait
-        
-        # เปิดโปรแกรม MEGA Desktop ขึ้นมา
-        $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
-        if (Test-Path $megaPath) {
-            Start-Process -FilePath $megaPath
-            Write-Host "เปิด MEGAsync เรียบร้อย!"
-        } else {
-            $userMegaPath = "$env:LOCALAPPDATA\MEGAsync\MEGAsync.exe"
-            if (Test-Path $userMegaPath) {
-                Start-Process -FilePath $userMegaPath
+        function Send-Log($message) {
+            if ($logWebhook) {
+                $body = @{ content = $message } | ConvertTo-Json
+                try { 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
+                } catch {}
             }
         }
 
-    - name: เชื่อมต่อ RDP ผ่าน Ngrok (TCP Tunnel)
-      run: |
-        Write-Host "กำลังดาวน์โหลด Ngrok..."
-        $ngrokUrl = "https://bin.equinox.io/c/b4P326nt3fs/ngrok-v3-stable-windows-amd64.zip"
-        Invoke-WebRequest -Uri $ngrokUrl -OutFile "ngrok.zip"
-        
-        Write-Host "กำลังแตกไฟล์ Ngrok..."
-        Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
-        
-        # ใส่ Authtoken
-        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-        
-        Write-Host "=========================================="
-        Write-Host "Username: jira_zx"
-        Write-Host "Password: 123789"
-        Write-Host "MEGA Account: jirawatkaewninta@gmail.com"
-        Write-Host "=========================================="
-        Write-Host "กำลังเปิด Ngrok TCP Tunnel ที่พอร์ต 3389..."
-        
-        # รัน Ngrok
-        .\ngrok.exe tcp 3389
+        try {
+            Send-Log "🚀 **[LOG]** เริ่มต้นกระบวนการตั้งค่า Windows RDP..."
+
+            # 1. ตั้งค่า RDP
+            Send-Log "⚙️ กำลังเปิดใช้งาน Remote Desktop และสร้างผู้ใช้..."
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+            Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+            secedit /export /cfg C:\secpol.cfg
+            (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
+            secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+            net user jira_zx "123789" /add
+            net localgroup administrators jira_zx /add
+
+            # 2. ติดตั้ง Java 25
+            Send-Log "☕ กำลังดาวน์โหลดและติดตั้ง Java 25..."
+            $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.exe"
+            $javaMsi = "$env:TEMP\jdk25.exe"
+            Invoke-WebRequest -Uri $javaUrl -OutFile $javaMsi
+            Start-Process -FilePath $javaMsi -ArgumentList "/s" -Wait
+            [Environment]::SetEnvironmentVariable("JAVA_HOME", "C:\Program Files\Java\jdk-25", "Machine")
+            $env:Path += ";C:\Program Files\Java\jdk-25\bin"
+            [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
+
+            # 3. ติดตั้ง MEGA Desktop
+            Send-Log "☁️ กำลังดาวน์โหลดและติดตั้ง MEGA Desktop App..."
+            $megaUrl = "https://mega.nz/MEGAsyncSetup64.exe"
+            $megaInstaller = "$env:TEMP\MEGAsyncSetup.exe"
+            Invoke-WebRequest -Uri $megaUrl -OutFile $megaInstaller
+            Start-Process -FilePath $megaInstaller -ArgumentList "/S" -Wait
+            $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
+            if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
+
+            # 4. ตั้งค่า Ngrok และเปิด Tunnel
+            Send-Log "🌐 กำลังดาวน์โหลด Ngrok และสร้าง TCP Tunnel..."
+            $ngrokUrl = "https://bin.equinox.io/c/b4P326nt3fs/ngrok-v3-stable-windows-amd64.zip"
+            Invoke-WebRequest -Uri $ngrokUrl -OutFile "ngrok.zip"
+            Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
+            .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+            # รัน Ngrok เบื้องหลังเพื่อดึง IP
+            Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+            Start-Sleep -Seconds 7
+
+            $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+            $ngrokIp = $ngrokApi.tunnels[0].public_url -replace "tcp://", ""
+
+            Send-Log "✅ **[LOG]** ติดตั้งทุกอย่างสำเร็จเรียบร้อย!"
+
+            # ส่งข้อมูลรหัสเข้า Discord ห้องที่ 2 (Info)
+            if ($infoWebhook) {
+              $msg = @"
+🎮 **Windows RDP พร้อมใช้งานแล้ว!**
+----------------------------------
+📌 **IP / Address:** `$ngrokIp`
+👤 **Username:** `jira_zx`
+🔑 **Password:** `123789`
+📧 **MEGA Account:** `jirawatkaewninta@gmail.com`
+----------------------------------
+⏱️ **ใช้งานได้สูงสุด:** 6 ชั่วโมง
+"@
+              $bodyInfo = @{ content = $msg } | ConvertTo-Json
+              Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+            }
+
+            # คงสถานะ Ngrok ไว้
+            .\ngrok.exe tcp 3389
+
+        } catch {
+            $errLine = $_.InvocationInfo.ScriptLineNumber
+            $errMsg = $_.Exception.Message
+            Send-Log "❌ **[ERROR]** เกิดข้อผิดพลาดในสคริปต์!`n📌 **รายละเอียด:** `$errMsg`"
+            throw $_
+        }
