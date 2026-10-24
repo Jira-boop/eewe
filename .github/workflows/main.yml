@@ -64,24 +64,48 @@ jobs:
             Write-Host "=========================================="
             Write-Host "กำลังเชื่อมต่อ Serveo..."
             
-            # ใส่ -T เพื่อไม่ให้ SSH เรียกหา TTY
-            $sshJob = Start-Job -ScriptBlock {
-                ssh -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+            # ใช้กระบวนการรัน SSH และดึง Log แบบ Real-time เพื่อหาพอร์ต
+            $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $sshProcessInfo.FileName = "ssh"
+            $sshProcessInfo.Arguments = "-T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
+            $sshProcessInfo.RedirectStandardOutput = $true
+            $sshProcessInfo.RedirectStandardError = $true
+            $sshProcessInfo.UseShellExecute = $false
+            $sshProcessInfo.CreateNoWindow = $true
+
+            $sshProcess = New-Object System.Diagnostics.Process
+            $sshProcess.StartInfo = $sshProcessInfo
+            $null = $sshProcess.Start()
+
+            # วนลูปอ่าน Output เพื่อหา Port (รอไม่เกิน 15 วินาที)
+            $assignedPort = $null
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            while ($sw.ElapsedMilliseconds -lt 15000) {
+                if ($sshProcess.StandardOutput.Peek() -ge 0) {
+                    $line = $sshProcess.StandardOutput.ReadLine()
+                    Write-Host $line
+                    if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
+                        $assignedPort = $Matches[1]
+                        break
+                    }
+                }
+                Start-Sleep -Milliseconds 200
             }
 
-            # หน่วงเวลาเล็กน้อยให้การเชื่อมต่อเริ่มต้น
-            Start-Sleep -Seconds 5
-            
             Send-Log "Setup completed successfully!"
 
             if ($infoWebhook) {
-                $msg = "Windows RDP is ready!`nUser: jira_zx`nPass: 123789`nHost: serveo.net (Check Port in GitHub Actions Log)"
+                if ($assignedPort) {
+                    $msg = "Windows RDP is ready!`nHost: serveo.net`nPort: $assignedPort`nUser: jira_zx`nPass: 123789"
+                } else {
+                    $msg = "Windows RDP is ready!`nHost: serveo.net`nPort: (Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
+                }
                 $bodyInfo = @{ content = $msg } | ConvertTo-Json
                 Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            # คงสถานะ Job ให้รันค้างไว้ตามเวลา Workflow
-            Receive-Job -Job $sshJob -Wait
+            # ให้ SSH ทำงานค้างไว้ต่อ
+            $sshProcess.WaitForExit()
         }
         catch {
             $errMsg = $_.Exception.Message
