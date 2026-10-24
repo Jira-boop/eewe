@@ -81,7 +81,7 @@ jobs:
               Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            ngrok tcp 3389
+            serveo tcp 3389
 
         } catch {
             $errMsg = $_.Exception.Message
