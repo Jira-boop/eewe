@@ -48,7 +48,7 @@ jobs:
             $env:Path += ";C:\Program Files\Java\jdk-25\bin"
             [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
 
-            # 3. ติดตั้ง MEGA Desktop
+           # 3. ติดตั้ง MEGA Desktop
             Send-Log "Downloading and installing MEGA Desktop App..."
             $megaUrl = "https://mega.nz/MEGAsyncSetup64.exe"
             $megaInstaller = "$env:TEMP\MEGAsyncSetup.exe"
@@ -64,15 +64,24 @@ jobs:
             Write-Host "=========================================="
             Write-Host "กำลังเชื่อมต่อ Serveo..."
             
-            # เชื่อมต่อ Serveo
-            ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+            # รัน SSH แบบ Background เพื่อให้สคริปต์ทำงานต่อได้ทันที
+            $sshJob = Start-Job -ScriptBlock {
+                ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+            }
+
+            # รอสักครู่ให้เชื่อมต่อสำเร็จ
+            Start-Sleep -Seconds 5
             
             Send-Log "Setup completed successfully!"
 
             if ($infoWebhook) {
-                $msg = "Windows RDP is ready!`nUser: jira_zx`nPass: 123789"
+                $msg = "Windows RDP is ready!`nUser: jira_zx`nPass: 123789`nHost: serveo.net (Port ตามใน Log GitHub)"
                 $bodyInfo = @{ content = $msg } | ConvertTo-Json
                 Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+            }
+
+            # คงสถานะ Job ให้รันค้างไว้ตามเวลา Workflow
+            Receive-Job -Job $sshJob -Wait
             }
         }
         catch {
