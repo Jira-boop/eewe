@@ -57,14 +57,16 @@ jobs:
             $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
-            # 4. ติดตั้ง Ngrok ผ่านตัวจัดการทางการของ Windows (หลบปัญหาลิงก์ตาย 404)
-            Send-Log "Installing Ngrok via winget..."
-            winget install --id Ngrok.Ngrok -e --accept-source-agreements --accept-package-agreements --silent
-            
-            # รีเฟรช Path ในสคริปต์เพื่อให้เรียกคำสั่ง ngrok ได้ทันที
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-            if (!(Get-Command ngrok -ErrorAction SilentlyContinue)) {
-                $env:Path += ";C:\Program Files\ngrok"
+            - name: เชื่อมต่อ RDP ผ่าน Serveo (TCP Tunnel)
+       run: |
+        Write-Host "=========================================="
+        Write-Host "Username: jira_zx"
+        Write-Host "Password: 123789"
+        Write-Host "MEGA Account: jirawatkaewninta@gmail.com"
+        Write-Host "=========================================="
+        Write-Host "กำลังเชื่อมต่อ Serveo..."
+        
+        ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
             }
 
             Send-Log "Configuring Ngrok Authtoken..."
