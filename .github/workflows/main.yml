@@ -57,24 +57,25 @@ jobs:
             $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
             if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
 
-    - name: เชื่อมต่อ RDP ผ่าน Serveo (TCP Tunnel)
-      run: |
-        Write-Host "=========================================="
-        Write-Host "Username: jira_zx"
-        Write-Host "Password: 123789"
-        Write-Host "MEGA Account: jirawatkaewninta@gmail.com"
-        Write-Host "=========================================="
-        Write-Host "กำลังเชื่อมต่อ Serveo..."
-        
-        ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
-        Send-Log "Setup completed successfully!"
+            Write-Host "=========================================="
+            Write-Host "Username: jira_zx"
+            Write-Host "Password: 123789"
+            Write-Host "MEGA Account: jirawatkaewninta@gmail.com"
+            Write-Host "=========================================="
+            Write-Host "กำลังเชื่อมต่อ Serveo..."
+            
+            # เชื่อมต่อ Serveo
+            ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net
+            
+            Send-Log "Setup completed successfully!"
 
             if ($infoWebhook) {
-              $msg = "Windows RDP is ready!`nIP: $ngrokIp`nUser: jira_zx`nPass: 123789"
-              $bodyInfo = @{ content = $msg } | ConvertTo-Json
-              Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
-              
-            catch {
+                $msg = "Windows RDP is ready!`nUser: jira_zx`nPass: 123789"
+                $bodyInfo = @{ content = $msg } | ConvertTo-Json
+                Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+            }
+        }
+        catch {
             $errMsg = $_.Exception.Message
             Send-Log "ERROR occurred: $errMsg"
             throw $_
