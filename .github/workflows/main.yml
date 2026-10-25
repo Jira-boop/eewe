@@ -64,10 +64,11 @@ jobs:
             Write-Host "=========================================="
             Write-Host "กำลังเชื่อมต่อ Serveo..."
             
-            # ใช้กระบวนการรัน SSH และดึง Log แบบ Real-time เพื่อหาพอร์ต
+            # ฟังก์ชันรัน SSH Tunnel ไปยัง Serveo แบบป้องกันการตัดการเชื่อมต่ออัตโนมัติ
             $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
             $sshProcessInfo.FileName = "ssh"
-            $sshProcessInfo.Arguments = "-T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
+            # เพิ่ม ServerAliveInterval เพื่อกันการตัดการเชื่อมต่อเมื่อไม่มีการใช้งาน (Idle Timeout)
+            $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
             $sshProcessInfo.RedirectStandardOutput = $true
             $sshProcessInfo.RedirectStandardError = $true
             $sshProcessInfo.UseShellExecute = $false
@@ -77,10 +78,10 @@ jobs:
             $sshProcess.StartInfo = $sshProcessInfo
             $null = $sshProcess.Start()
 
-            # วนลูปอ่าน Output เพื่อหา Port (รอไม่เกิน 15 วินาที)
+            # วนลูปอ่าน Output เพื่อหา Port (รอไม่เกิน 20 วินาที)
             $assignedPort = $null
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            while ($sw.ElapsedMilliseconds -lt 15000) {
+            while ($sw.ElapsedMilliseconds -lt 20000) {
                 if ($sshProcess.StandardOutput.Peek() -ge 0) {
                     $line = $sshProcess.StandardOutput.ReadLine()
                     Write-Host $line
@@ -104,8 +105,20 @@ jobs:
                 Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
             }
 
-            # ให้ SSH ทำงานค้างไว้ต่อ
-            $sshProcess.WaitForExit()
+            # วนลูปเฝ้าระวังและค้างการทำงานไว้จนกว่าจะครบ 360 นาที หรือจนกว่ากระบวนการ SSH จะหลุด
+            Write-Host "RDP is running. Keeping session alive..."
+            while (-not $sshProcess.HasExited) {
+                Start-Sleep -Seconds 30
+            }
+
+            # หาก SSH หลุด ให้พยายามเชื่อมต่อใหม่อัตโนมัติ (Auto-reconnect loop)
+            while ($true) {
+                Write-Host "SSH disconnected. Reconnecting to Serveo..."
+                $sshProcess.Start() | Out-Null
+                while (-not $sshProcess.HasExited) {
+                    Start-Sleep -Seconds 30
+                }
+            }
         }
         catch {
             $errMsg = $_.Exception.Message
