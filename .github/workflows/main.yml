@@ -15,9 +15,9 @@ jobs:
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
         $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
 
-        # ตั้งค่าบัญชี MEGA ของคุณตรงนี้
+        # ตั้งค่าบัญชี MEGA และรหัสผ่านที่ถูกต้อง
         $megaEmail = "jirawatkaewninta@gmail.com"
-        $megaPass = "ใส่รหัสผ่านเมก้าของคุณตรงนี้"   # <-- เปลี่ยนเป็นรหัสผ่าน MEGA ของคุณ
+        $megaPass = "Jira-12344031!"
 
         $workDir = "C:\RDPData"
         if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
@@ -36,22 +36,28 @@ jobs:
         try {
             Send-Log "Starting Windows RDP with 3 Minecraft Servers & MEGA..."
 
-            # 1. ติดตั้ง MEGAcmd และเพิ่ม Path ลง System Environment
+            # 1. ดาวน์โหลดและติดตั้ง MEGAcmd ตัวจริง
             Send-Log "Installing MEGAcmd..."
-            Invoke-WebRequest -Uri "https://mega.nz/MEGAsyncSetup64.exe" -OutFile "$env:TEMP\mega.exe"
-            Start-Process -FilePath "$env:TEMP\mega.exe" -ArgumentList "/S" -Wait
+            Invoke-WebRequest -Uri "https://mega.nz/MEGAcmdSetup64.exe" -OutFile "$env:TEMP\MEGAcmdSetup64.exe"
+            Start-Process -FilePath "$env:TEMP\MEGAcmdSetup64.exe" -ArgumentList "/S" -Wait
 
             $megaCmdPath = "$env:LOCALAPPDATA\MEGAcmd"
-            if (Test-Path $megaCmdPath) {
-                $env:Path += ";$megaCmdPath"
-                [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
+            
+            # รอจนกว่าไฟล์ .bat จะพร้อมใช้งาน
+            $timeout = 0
+            while (-not (Test-Path "$megaCmdPath\mega-login.bat") -and $timeout -lt 30) {
+                Start-Sleep -Seconds 1
+                $timeout++
             }
+
+            # ล็อกอินเข้า MEGA
+            Send-Log "Logging in to MEGA..."
+            cmd.exe /c "`"$megaCmdPath\mega-login.bat`" $megaEmail $megaPass"
             Start-Sleep -Seconds 5
 
-            # ล็อกอินเข้า MEGA ผ่าน cmd.exe /c
-            Send-Log "Logging in to MEGA..."
-            cmd.exe /c "mega-login $megaEmail $megaPass"
-            Start-Sleep -Seconds 3
+            # ตรวจสอบรายชื่อไฟล์บน MEGA
+            Send-Log "Checking MEGA cloud files..."
+            cmd.exe /c "`"$megaCmdPath\mega-ls.bat`" /"
 
             # 2. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
@@ -81,29 +87,34 @@ jobs:
             $javaExe = "$javaPath\java.exe"
             if (-not (Test-Path $javaExe)) { $javaExe = "java" }
 
-            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมด (ที่มี 3 เซิร์ฟเวอร์) ลงมาที่ C:\RDPData ผ่าน cmd.exe /c[cite: 1]
-            Send-Log "Downloading 3 servers from MEGA..."
-            cmd.exe /c "mega-get /MEGA $workDir"
-            Send-Log "All servers downloaded successfully!"
+            # 4. ดึงโฟลเดอร์ MEGA ลงมาที่ C:\RDPData
+            Send-Log "Downloading servers from MEGA..."
+            cmd.exe /c "`"$megaCmdPath\mega-get.bat`" /MEGA $workDir"
+            
+            if (-not (Test-Path "$workDir\MEGA")) {
+                Send-Log "Retrying download with alternative path..."
+                cmd.exe /c "`"$megaCmdPath\mega-get.bat`" //MEGA $workDir"
+            }
+            Send-Log "Download process completed!"
 
             # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
             Send-Log "Starting all 3 Minecraft servers automatically..."
 
-            # เซิร์ฟเวอร์ที่ 1: classic[cite: 1]
+            # เซิร์ฟเวอร์ที่ 1: classic
             $classicDir = "$workDir\MEGA\classic"
             if (Test-Path "$classicDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $classicDir -WindowStyle Hidden
                 Send-Log "Classic server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 2: lobby[cite: 1]
+            # เซิร์ฟเวอร์ที่ 2: lobby
             $lobbyDir = "$workDir\MEGA\lobby"
             if (Test-Path "$lobbyDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $lobbyDir -WindowStyle Hidden
                 Send-Log "Lobby server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 3: world merge[cite: 1]
+            # เซิร์ฟเวอร์ที่ 3: world merge
             $worldMergeDir = "$workDir\MEGA\world merge"
             if (Test-Path "$worldMergeDir\velocity.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar velocity.jar" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
@@ -169,12 +180,12 @@ jobs:
             $sshProcess = Start-ServeoTunnel
             Send-Log "Setup and 3 servers running successfully!"
 
-            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA ผ่าน cmd.exe /c เมื่อเกิดการเชื่อมต่อใหม่
+            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA
             while ($true) {
                 if ($sshProcess.HasExited) {
                     Write-Host "SSH disconnected. Reconnecting and backing up to MEGA..."
                     if (Test-Path "$workDir\MEGA") {
-                        cmd.exe /c "mega-put -f --reload $workDir\MEGA /"
+                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" -f --reload `"$workDir\MEGA`" /"
                         Send-Log "All 3 servers backed up to MEGA successfully."
                     }
                     $sshProcess = Start-ServeoTunnel
