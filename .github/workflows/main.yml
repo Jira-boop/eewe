@@ -1,4 +1,4 @@
-name: Windows RDP 3-Servers Minecraft & MEGA
+name: Windows RDP 3-Servers Minecraft & MEGA Complete
 
 on:
   workflow_dispatch:
@@ -9,25 +9,26 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: รัน RDP, ดึง 3 เซิร์ฟเวอร์จาก MEGA, Java 25 และเปิดออโต้
+    - name: รัน RDP, MEGAcmd, Java 25 และเปิด 3 เซิร์ฟเวอร์ออโต้
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
         $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
 
+        # ตั้งค่าบัญชี MEGA ของคุณตรงนี้
         $megaEmail = "jirawatkaewninta@gmail.com"
-        $megaPass = "ใส่รหัสผ่านเมก้าของคุณตรงนี้"   # <-- ใส่รหัสผ่าน MEGA ของคุณ
+        $megaPass = "ใส่รหัสผ่านเมก้าของคุณตรงนี้"   # <-- เปลี่ยนเป็นรหัสผ่าน MEGA ของคุณ
 
         $workDir = "C:\RDPData"
-        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path$workDir | Out-Null }
         if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" | Out-Null }
 
         function Send-Log {
             param([string]$message)
             if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
-                $body = @{ content = $message } | ConvertTo-Json
+                $body = @{ content =$message } | ConvertTo-Json
                 try { 
-                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body$body -ContentType 'application/json' 
                 } catch {}
             }
         }
@@ -35,14 +36,22 @@ jobs:
         try {
             Send-Log "Starting Windows RDP with 3 Minecraft Servers & MEGA..."
 
-            # 1. ติดตั้งและล็อกอิน MEGAcmd
+            # 1. ติดตั้ง MEGAcmd และเพิ่ม Path ทันที
             Send-Log "Installing MEGAcmd..."
             Invoke-WebRequest -Uri "https://mega.nz/MEGAsyncSetup64.exe" -OutFile "$env:TEMP\mega.exe"
             Start-Process -FilePath "$env:TEMP\mega.exe" -ArgumentList "/S" -Wait
-            $env:Path += ";$env:LOCALAPPDATA\MEGAcmd"
 
+            $megaCmdPath = "$env:LOCALAPPDATA\MEGAcmd"
+            if (Test-Path $megaCmdPath) {
+                $env:Path += ";$megaCmdPath"
+                [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
+            }
+
+            # ล็อกอินเข้า MEGA แบบระบุเส้นทางเต็มเพื่อป้องกัน Error
             Send-Log "Logging in to MEGA..."
-            cmd.exe /c "mega-login $megaEmail $megaPass"
+            $megaLoginExe = "$megaCmdPath\mega-login.bat"
+            if (-not (Test-Path $megaLoginExe)) {$megaLoginExe = "mega-login" }
+            & $megaLoginExe $megaEmail$megaPass
 
             # 2. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
@@ -54,11 +63,14 @@ jobs:
             net user jira_zx "123789" /add
             net localgroup administrators jira_zx /add
 
+            # ส่วนเสริม: ปรับแต่ง RDP ให้ลดดีเลย์
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 0 -ErrorAction SilentlyContinue
+
             # 3. ติดตั้ง Java 25 และเซ็ต Path
             Send-Log "Installing Java 25..."
             $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.msi"
             $javaInstaller = "$env:TEMP\java25.msi"
-            Invoke-WebRequest -Uri $javaUrl -OutFile $javaInstaller
+            Invoke-WebRequest -Uri $javaUrl -OutFile$javaInstaller
             Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $javaInstaller /quiet /norestart" -Wait
             
             $javaPath = "C:\Program Files\Common Files\Oracle\Java\javapath"
@@ -67,31 +79,31 @@ jobs:
                 [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
             }
             $javaExe = "$javaPath\java.exe"
-            if (-not (Test-Path $javaExe)) { $javaExe = "java" }
+            if (-not (Test-Path $javaExe)) {$javaExe = "java" }
 
-            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมดลงมาที่ C:\RDPData
+            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมด (ที่มี 3 เซิร์ฟเวอร์) ลงมาที่ C:\RDPData[cite: 1]
             Send-Log "Downloading 3 servers from MEGA..."
             cmd.exe /c "mega-get /MEGA $workDir"
             Send-Log "All servers downloaded successfully!"
 
-            # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ (Classic, Lobby, World Merge/Velocity)
+            # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
             Send-Log "Starting all 3 Minecraft servers automatically..."
 
-            # เซิร์ฟเวอร์ที่ 1: classic
+            # เซิร์ฟเวอร์ที่ 1: classic[cite: 1]
             $classicDir = "$workDir\MEGA\classic"
             if (Test-Path "$classicDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $classicDir -WindowStyle Hidden
                 Send-Log "Classic server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 2: lobby
+            # เซิร์ฟเวอร์ที่ 2: lobby[cite: 1]
             $lobbyDir = "$workDir\MEGA\lobby"
             if (Test-Path "$lobbyDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $lobbyDir -WindowStyle Hidden
                 Send-Log "Lobby server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 3: world merge (Velocity / Proxy)
+            # เซิร์ฟเวอร์ที่ 3: world merge[cite: 1]
             $worldMergeDir = "$workDir\MEGA\world merge"
             if (Test-Path "$worldMergeDir\velocity.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar velocity.jar" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
@@ -112,27 +124,26 @@ jobs:
                 $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $sshProcessInfo.FileName = "ssh"
                 $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
-                $sshProcessInfo.RedirectStandardOutput = $true
-                $sshProcessInfo.RedirectStandardError = $true
-                $sshProcessInfo.UseShellExecute = $false
-                $sshProcessInfo.CreateNoWindow = $true
+                $sshProcessInfo.RedirectStandardOutput =$true
+                $sshProcessInfo.RedirectStandardError =$true
+                $sshProcessInfo.UseShellExecute =$false
+                $sshProcessInfo.CreateNoWindow =$true
 
                 $sshProcess = New-Object System.Diagnostics.Process
-                $sshProcess.StartInfo = $sshProcessInfo
-                $null = $sshProcess.Start()
+                $sshProcess.StartInfo =$sshProcessInfo
+                $null =$sshProcess.Start()
 
                 Write-Host "กำลังเชื่อมต่อ Serveo..."
-                $assignedPort = $null
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                $assignedPort = $null$sw = [System.Diagnostics.Stopwatch]::StartNew()
                 
                 while ($sw.ElapsedMilliseconds -lt 25000) {
                     if ($sshProcess.StandardOutput.Peek() -ge 0) {
-                        $line = $sshProcess.StandardOutput.ReadLine()
+                        $line =$sshProcess.StandardOutput.ReadLine()
                         if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
                             Write-Host $line
                         }
                         if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
-                            $assignedPort = $Matches[1]
+                            $assignedPort =$Matches[1]
                             break
                         }
                     }
@@ -140,38 +151,8 @@ jobs:
                 }
 
                 if ($infoWebhook) {
-                    if ($assignedPort) {
-                        $msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
+                    if ($assignedPort) {$msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
                     } else {
                         $msg = "Windows RDP is ready!`nHost: serveo.net (Port: Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
                     }
-                    $bodyInfo = @{ content = $msg } | ConvertTo-Json
-                    try {
-                        Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
-                    } catch {}
-                }
-
-                return $sshProcess
-            }
-
-            $sshProcess = Start-ServeoTunnel
-            Send-Log "Setup and 3 servers running successfully!"
-
-            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA เมื่อเกิดการเชื่อมต่อใหม่
-            while ($true) {
-                if ($sshProcess.HasExited) {
-                    Write-Host "SSH disconnected. Reconnecting and backing up to MEGA..."
-                    if (Test-Path "$workDir\MEGA") {
-                        cmd.exe /c "mega-put -f --reload $workDir\MEGA /"
-                        Send-Log "All 3 servers backed up to MEGA successfully."
-                    }
-                    $sshProcess = Start-ServeoTunnel
-                }
-                Start-Sleep -Seconds 30
-            }
-        }
-        catch {
-            $errMsg = $_.Exception.Message
-            Send-Log "ERROR occurred: $errMsg"
-            throw $_
-        }
+                    $bodyInfo = @{ content = $msg } \vert{} ConvertTo-Json try { Invoke-RestMethod -Uri $
