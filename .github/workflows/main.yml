@@ -36,28 +36,22 @@ jobs:
         try {
             Send-Log "Starting Windows RDP with 3 Minecraft Servers & MEGA..."
 
-            # 1. ติดตั้ง MEGAcmd
+            # 1. ติดตั้ง MEGAcmd และเพิ่ม Path ลง System Environment
             Send-Log "Installing MEGAcmd..."
             Invoke-WebRequest -Uri "https://mega.nz/MEGAsyncSetup64.exe" -OutFile "$env:TEMP\mega.exe"
             Start-Process -FilePath "$env:TEMP\mega.exe" -ArgumentList "/S" -Wait
 
-            # กำหนดตำแหน่งโฟลเดอร์ติดตั้ง MEGAcmd ของระบบ Windows
             $megaCmdPath = "$env:LOCALAPPDATA\MEGAcmd"
-            $megaLoginBat = "$megaCmdPath\mega-login.bat"
-            $megaGetBat = "$megaCmdPath\mega-get.bat"
-            $megaPutBat = "$megaCmdPath\mega-put.bat"
-
-            # รอจนกว่าไฟล์ติดตั้งจะสร้างตัวรัน batch เสร็จสมบูรณ์
-            $timeout = 0
-            while (-not (Test-Path $megaLoginBat) -and $timeout -lt 30) {
-                Start-Sleep -Seconds 1
-                $timeout++
+            if (Test-Path $megaCmdPath) {
+                $env:Path += ";$megaCmdPath"
+                [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
             }
-
-            # ล็อกอินเข้า MEGA โดยเรียกไฟล์ .bat ผ่านเส้นทางเต็มโดยตรง
-            Send-Log "Logging in to MEGA..."
-            & "$megaLoginBat" $megaEmail $megaPass
             Start-Sleep -Seconds 5
+
+            # ล็อกอินเข้า MEGA ผ่าน cmd.exe /c
+            Send-Log "Logging in to MEGA..."
+            cmd.exe /c "mega-login $megaEmail $megaPass"
+            Start-Sleep -Seconds 3
 
             # 2. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
@@ -87,29 +81,29 @@ jobs:
             $javaExe = "$javaPath\java.exe"
             if (-not (Test-Path $javaExe)) { $javaExe = "java" }
 
-            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมด (ที่มี 3 เซิร์ฟเวอร์) ลงมาที่ C:\RDPData โดยใช้ path เต็ม
+            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมด (ที่มี 3 เซิร์ฟเวอร์) ลงมาที่ C:\RDPData ผ่าน cmd.exe /c[cite: 1]
             Send-Log "Downloading 3 servers from MEGA..."
-            & "$megaGetBat" /MEGA $workDir
-            Send-Log "Download process completed!"
+            cmd.exe /c "mega-get /MEGA $workDir"
+            Send-Log "All servers downloaded successfully!"
 
             # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
             Send-Log "Starting all 3 Minecraft servers automatically..."
 
-            # เซิร์ฟเวอร์ที่ 1: classic
+            # เซิร์ฟเวอร์ที่ 1: classic[cite: 1]
             $classicDir = "$workDir\MEGA\classic"
             if (Test-Path "$classicDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $classicDir -WindowStyle Hidden
                 Send-Log "Classic server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 2: lobby
+            # เซิร์ฟเวอร์ที่ 2: lobby[cite: 1]
             $lobbyDir = "$workDir\MEGA\lobby"
             if (Test-Path "$lobbyDir\server.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $lobbyDir -WindowStyle Hidden
                 Send-Log "Lobby server started!"
             }
 
-            # เซิร์ฟเวอร์ที่ 3: world merge
+            # เซิร์ฟเวอร์ที่ 3: world merge[cite: 1]
             $worldMergeDir = "$workDir\MEGA\world merge"
             if (Test-Path "$worldMergeDir\velocity.jar") {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar velocity.jar" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
@@ -175,12 +169,12 @@ jobs:
             $sshProcess = Start-ServeoTunnel
             Send-Log "Setup and 3 servers running successfully!"
 
-            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA เมื่อเกิดการเชื่อมต่อใหม่
+            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA ผ่าน cmd.exe /c เมื่อเกิดการเชื่อมต่อใหม่
             while ($true) {
                 if ($sshProcess.HasExited) {
                     Write-Host "SSH disconnected. Reconnecting and backing up to MEGA..."
                     if (Test-Path "$workDir\MEGA") {
-                        & "$megaPutBat" -f --reload "$workDir\MEGA" "/"
+                        cmd.exe /c "mega-put -f --reload $workDir\MEGA /"
                         Send-Log "All 3 servers backed up to MEGA successfully."
                     }
                     $sshProcess = Start-ServeoTunnel
