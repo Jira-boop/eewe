@@ -9,41 +9,39 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: รัน RDP, MEGAcmd, Java 25 และเปิด 3 เซิร์ฟเวอร์ออโต้
+    - name: รัน RDP, MEGAcmd, Java 25, Playit.gg และเปิด 3 เซิร์ฟเวอร์ออโต้
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
         $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
 
-        # ตั้งค่าบัญชี MEGA และรหัสผ่านที่ถูกต้อง
+        # ตั้งค่าบัญชี MEGA และรหัสผ่าน
         $megaEmail = "jirawatkaewninta@gmail.com"
         $megaPass = "Jira-12344031!"
 
         $workDir = "C:\RDPData"
-        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path$workDir | Out-Null }
         if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" | Out-Null }
 
         function Send-Log {
             param([string]$message)
             if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
-                $body = @{ content = $message } | ConvertTo-Json
+                $body = @{ content =$message } | ConvertTo-Json
                 try { 
-                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body$body -ContentType 'application/json' 
                 } catch {}
             }
         }
 
         try {
-            Send-Log "Starting Windows RDP with 3 Minecraft Servers & MEGA..."
+            Send-Log "Starting Windows RDP with 3 Minecraft Servers, Playit.gg & MEGA..."
 
-            # 1. ดาวน์โหลดและติดตั้ง MEGAcmd ตัวจริง
+            # 1. ติดตั้ง MEGAcmd
             Send-Log "Installing MEGAcmd..."
             Invoke-WebRequest -Uri "https://mega.nz/MEGAcmdSetup64.exe" -OutFile "$env:TEMP\MEGAcmdSetup64.exe"
             Start-Process -FilePath "$env:TEMP\MEGAcmdSetup64.exe" -ArgumentList "/S" -Wait
 
             $megaCmdPath = "$env:LOCALAPPDATA\MEGAcmd"
-            
-            # รอจนกว่าไฟล์ .bat จะพร้อมใช้งาน
             $timeout = 0
             while (-not (Test-Path "$megaCmdPath\mega-login.bat") -and $timeout -lt 30) {
                 Start-Sleep -Seconds 1
@@ -52,12 +50,8 @@ jobs:
 
             # ล็อกอินเข้า MEGA
             Send-Log "Logging in to MEGA..."
-            cmd.exe /c "`"$megaCmdPath\mega-login.bat`" $megaEmail $megaPass"
+            cmd.exe /c "`"$megaCmdPath\mega-login.bat`" $megaEmail$megaPass"
             Start-Sleep -Seconds 5
-
-            # ตรวจสอบรายชื่อไฟล์บน MEGA
-            Send-Log "Checking MEGA cloud files..."
-            cmd.exe /c "`"$megaCmdPath\mega-ls.bat`" /"
 
             # 2. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
@@ -69,14 +63,13 @@ jobs:
             net user jira_zx "123789" /add
             net localgroup administrators jira_zx /add
 
-            # ปรับแต่ง RDP ให้ลดดีเลย์
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 0 -ErrorAction SilentlyContinue
 
-            # 3. ติดตั้ง Java 25 และเซ็ต Path
+            # 3. ติดตั้ง Java 25
             Send-Log "Installing Java 25..."
             $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.msi"
             $javaInstaller = "$env:TEMP\java25.msi"
-            Invoke-WebRequest -Uri $javaUrl -OutFile $javaInstaller
+            Invoke-WebRequest -Uri $javaUrl -OutFile$javaInstaller
             Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $javaInstaller /quiet /norestart" -Wait
             
             $javaPath = "C:\Program Files\Common Files\Oracle\Java\javapath"
@@ -85,10 +78,10 @@ jobs:
                 [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
             }
             $javaExe = "$javaPath\java.exe"
-            if (-not (Test-Path $javaExe)) { $javaExe = "java" }
+            if (-not (Test-Path $javaExe)) {$javaExe = "java" }
 
             # 4. ดึงโฟลเดอร์ MEGA ลงมาที่ C:\RDPData
-            Send-Log "Downloading servers from MEGA..."
+            Send-Log "Downloading servers and playit from MEGA..."
             cmd.exe /c "`"$megaCmdPath\mega-get.bat`" /MEGA $workDir"
             
             if (-not (Test-Path "$workDir\MEGA")) {
@@ -102,99 +95,38 @@ jobs:
 
             # เซิร์ฟเวอร์ที่ 1: classic
             $classicDir = "$workDir\MEGA\classic"
-            if (Test-Path "$classicDir\server.jar") {
+            if (Test-Path $classicDir) {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $classicDir -WindowStyle Hidden
-                Send-Log "Classic server started!"
+                Send-Log "Classic server started successfully!"
             }
 
             # เซิร์ฟเวอร์ที่ 2: lobby
             $lobbyDir = "$workDir\MEGA\lobby"
-            if (Test-Path "$lobbyDir\server.jar") {
+            if (Test-Path $lobbyDir) {
                 Start-Process -FilePath $javaExe -ArgumentList "-Xmx4G -Xms1G -jar server.jar nogui" -WorkingDirectory $lobbyDir -WindowStyle Hidden
-                Send-Log "Lobby server started!"
+                Send-Log "Lobby server started successfully!"
             }
 
             # เซิร์ฟเวอร์ที่ 3: world merge
             $worldMergeDir = "$workDir\MEGA\world merge"
-            if (Test-Path "$worldMergeDir\velocity.jar") {
-                Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar velocity.jar" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
-                Send-Log "World Merge (Velocity) started!"
-            } elseif (Test-Path "$worldMergeDir\server.jar") {
-                Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar server.jar nogui" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
-                Send-Log "World Merge server started!"
+            if (Test-Path $worldMergeDir) {
+                if (Test-Path "$worldMergeDir\velocity.jar") {
+                    Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar velocity.jar" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
+                    Send-Log "World Merge (Velocity) started successfully!"
+                } else {
+                    Start-Process -FilePath $javaExe -ArgumentList "-Xmx2G -Xms512M -jar server.jar nogui" -WorkingDirectory $worldMergeDir -WindowStyle Hidden
+                    Send-Log "World Merge server started successfully!"
+                }
             }
 
-            Write-Host "=========================================="
-            Write-Host "Username: jira_zx"
-            Write-Host "Password: 123789"
-            Write-Host "Servers Path: $workDir\MEGA"
-            Write-Host "=========================================="
+            # 6. สั่งรัน Playit.gg อัตโนมัติจากเจาะจงโฟลเดอร์ C:\RDPData\MEGA\z
+            $zPlayitDir = "$workDir\MEGA\z"
+            $playitExePath = "$zPlayitDir\playit.exe"
 
-            # ฟังก์ชันเชื่อมต่อ Serveo
-            function Start-ServeoTunnel {
-                $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-                $sshProcessInfo.FileName = "ssh"
-                $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
-                $sshProcessInfo.RedirectStandardOutput = $true
-                $sshProcessInfo.RedirectStandardError = $true
-                $sshProcessInfo.UseShellExecute = $false
-                $sshProcessInfo.CreateNoWindow = $true
-
-                $sshProcess = New-Object System.Diagnostics.Process
-                $sshProcess.StartInfo = $sshProcessInfo
-                $null = $sshProcess.Start()
-
-                Write-Host "กำลังเชื่อมต่อ Serveo..."
-                $assignedPort = $null
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
-                
-                while ($sw.ElapsedMilliseconds -lt 25000) {
-                    if ($sshProcess.StandardOutput.Peek() -ge 0) {
-                        $line = $sshProcess.StandardOutput.ReadLine()
-                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
-                            Write-Host $line
-                        }
-                        if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
-                            $assignedPort = $Matches[1]
-                            break
-                        }
-                    }
-                    Start-Sleep -Milliseconds 200
-                }
-
-                if ($infoWebhook) {
-                    if ($assignedPort) {
-                        $msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
-                    } else {
-                        $msg = "Windows RDP is ready!`nHost: serveo.net (Port: Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
-                    }
-                    $bodyInfo = @{ content = $msg } | ConvertTo-Json
-                    try {
-                        Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
-                    } catch {}
-                }
-
-                return $sshProcess
-            }
-
-            $sshProcess = Start-ServeoTunnel
-            Send-Log "Setup and 3 servers running successfully!"
-
-            # 6. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA
-            while ($true) {
-                if ($sshProcess.HasExited) {
-                    Write-Host "SSH disconnected. Reconnecting and backing up to MEGA..."
-                    if (Test-Path "$workDir\MEGA") {
-                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" -f --reload `"$workDir\MEGA`" /"
-                        Send-Log "All 3 servers backed up to MEGA successfully."
-                    }
-                    $sshProcess = Start-ServeoTunnel
-                }
-                Start-Sleep -Seconds 30
-            }
-        }
-        catch {
-            $errMsg = $_.Exception.Message
-            Send-Log "ERROR occurred: $errMsg"
-            throw $_
-        }
+            Send-Log "Starting Playit.gg from $zPlayitDir..."
+            if (Test-Path $playitExePath) {
+                Start-Process -FilePath $playitExePath -WorkingDirectory$zPlayitDir -WindowStyle Hidden
+                Send-Log "Playit.gg started from C:\RDPData\MEGA\z successfully!"
+            } else {
+                # ถ้าหาที่ z ไม่เจอ จะช่วยค้นหาไฟล์ playit.exe ในโฟลเดอร์อื่นบน MEGA ให้เป็นตัวสำรอง
+                $foundPlayit = Get-ChildItem -Path "$
