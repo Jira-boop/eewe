@@ -1,4 +1,4 @@
-name: Windows RDP with Mega and Java 25
+name: Windows RDP Serveo Minimal
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: รันระบบทั้งหมดพร้อมระบบแยกแจ้งเตือน Error และ Success
+    - name: รัน RDP และ Serveo
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
@@ -17,7 +17,7 @@ jobs:
 
         function Send-Log {
             param([string]$message)
-            if ($logWebhook) {
+            if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
                 $body = @{ content = $message } | ConvertTo-Json
                 try { 
                     Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
@@ -26,9 +26,9 @@ jobs:
         }
 
         try {
-            Send-Log "Starting Windows RDP setup process..."
+            Send-Log "Starting minimal Windows RDP setup..."
 
-            # 1. ตั้งค่า RDP
+            # 1. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
             Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -38,86 +38,69 @@ jobs:
             net user jira_zx "123789" /add
             net localgroup administrators jira_zx /add
 
-            # 2. ติดตั้ง Java 25
-            Send-Log "Downloading and installing Java 25..."
-            $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.exe"
-            $javaMsi = "$env:TEMP\jdk25.exe"
-            Invoke-WebRequest -Uri $javaUrl -OutFile $javaMsi
-            Start-Process -FilePath $javaMsi -ArgumentList "/s" -Wait
-            [Environment]::SetEnvironmentVariable("JAVA_HOME", "C:\Program Files\Java\jdk-25", "Machine")
-            $env:Path += ";C:\Program Files\Java\jdk-25\bin"
-            [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
-
-            # 3. ติดตั้ง MEGA Desktop
-            Send-Log "Downloading and installing MEGA Desktop App..."
-            $megaUrl = "https://mega.nz/MEGAsyncSetup64.exe"
-            $megaInstaller = "$env:TEMP\MEGAsyncSetup.exe"
-            Invoke-WebRequest -Uri $megaUrl -OutFile $megaInstaller
-            Start-Process -FilePath $megaInstaller -ArgumentList "/S" -Wait
-            $megaPath = "C:\Program Files\MEGAsync\MEGAsync.exe"
-            if (Test-Path $megaPath) { Start-Process -FilePath $megaPath }
-
             Write-Host "=========================================="
             Write-Host "Username: jira_zx"
             Write-Host "Password: 123789"
-            Write-Host "MEGA Account: jirawatkaewninta@gmail.com"
             Write-Host "=========================================="
-            Write-Host "กำลังเชื่อมต่อ Serveo..."
-            
-            # ฟังก์ชันรัน SSH Tunnel ไปยัง Serveo แบบป้องกันการตัดการเชื่อมต่ออัตโนมัติ
-            $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $sshProcessInfo.FileName = "ssh"
-            # เพิ่ม ServerAliveInterval เพื่อกันการตัดการเชื่อมต่อเมื่อไม่มีการใช้งาน (Idle Timeout)
-            $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
-            $sshProcessInfo.RedirectStandardOutput = $true
-            $sshProcessInfo.RedirectStandardError = $true
-            $sshProcessInfo.UseShellExecute = $false
-            $sshProcessInfo.CreateNoWindow = $true
 
-            $sshProcess = New-Object System.Diagnostics.Process
-            $sshProcess.StartInfo = $sshProcessInfo
-            $null = $sshProcess.Start()
+            # ฟังก์ชันสำหรับเชื่อมต่อ Serveo และดึงพอร์ตใหม่
+            function Start-ServeoTunnel {
+                $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $sshProcessInfo.FileName = "ssh"
+                $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
+                $sshProcessInfo.RedirectStandardOutput = $true
+                $sshProcessInfo.RedirectStandardError = $true
+                $sshProcessInfo.UseShellExecute = $false
+                $sshProcessInfo.CreateNoWindow = $true
 
-            # วนลูปอ่าน Output เพื่อหา Port (รอไม่เกิน 20 วินาที)
-            $assignedPort = $null
-            $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            while ($sw.ElapsedMilliseconds -lt 20000) {
-                if ($sshProcess.StandardOutput.Peek() -ge 0) {
-                    $line = $sshProcess.StandardOutput.ReadLine()
-                    Write-Host $line
-                    if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
-                        $assignedPort = $Matches[1]
-                        break
+                $sshProcess = New-Object System.Diagnostics.Process
+                $sshProcess.StartInfo = $sshProcessInfo
+                $null = $sshProcess.Start()
+
+                Write-Host "กำลังเชื่อมต่อ Serveo..."
+                $assignedPort = $null
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                
+                while ($sw.ElapsedMilliseconds -lt 25000) {
+                    if ($sshProcess.StandardOutput.Peek() -ge 0) {
+                        $line = $sshProcess.StandardOutput.ReadLine()
+                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
+                            Write-Host $line
+                        }
+                        if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
+                            $assignedPort = $Matches[1]
+                            break
+                        }
                     }
+                    Start-Sleep -Milliseconds 200
                 }
-                Start-Sleep -Milliseconds 200
+
+                if ($infoWebhook) {
+                    if ($assignedPort) {
+                        $msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
+                    } else {
+                        $msg = "Windows RDP is ready!`nHost: serveo.net (Port: Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
+                    }
+                    $bodyInfo = @{ content = $msg } | ConvertTo-Json
+                    try {
+                        Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+                    } catch {}
+                }
+
+                return $sshProcess
             }
 
+            # เริ่มต้นเชื่อมต่อและดึงพอร์ตแรก
+            $sshProcess = Start-ServeoTunnel
             Send-Log "Setup completed successfully!"
 
-            if ($infoWebhook) {
-                if ($assignedPort) {
-                    $msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
-                } else {
-                    $msg = "Windows RDP is ready!`nHost: serveo.net (Port: Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
-                }
-                $bodyInfo = @{ content = $msg } | ConvertTo-Json
-                Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
-            }
-
-            # วนลูปเฝ้าระวังและค้างการทำงานไว้จนกว่าจะครบ 360 นาที หรือจนกว่ากระบวนการ SSH จะหลุด
-            Write-Host "RDP is running. Keeping session alive..."
-            while (-not $sshProcess.HasExited) {
-                Start-Sleep -Seconds 30
-            }
-
-            # หาก SSH หลุด ให้พยายามเชื่อมต่อใหม่อัตโนมัติ (Auto-reconnect loop)
+            # 3. วนลูปเฝ้าระวัง หากหลุดจะทำการสร้างกระบวนการใหม่และสุ่มพอร์ตใหม่ส่งเข้า Discord ทันที
             while ($true) {
-                Write-Host "SSH disconnected. Reconnecting to Serveo..."
-                $sshProcess.Start() | Out-Null
-                while (-not $sshProcess.HasExited) {
-                    Start-Sleep -Seconds 30
+                if ($sshProcess.HasExited) {
+                    Write-Host "SSH disconnected. Reconnecting and getting new port..."
+                    $sshProcess = Start-ServeoTunnel
                 }
+                Start-Sleep -Seconds 30
             }
         }
         catch {
