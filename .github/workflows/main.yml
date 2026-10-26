@@ -47,9 +47,10 @@ jobs:
                 [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
             }
 
-            # ล็อกอินเข้า MEGA ผ่าน cmd.exe โดยตรงเพื่อป้องกัน Error
+            # ล็อกอินเข้า MEGA และรอให้ระบบเชื่อมต่อเสร็จสมบูรณ์
             Send-Log "Logging in to MEGA..."
             cmd.exe /c "mega-login $megaEmail $megaPass"
+            Start-Sleep -Seconds 5
 
             # 2. ตั้งค่า RDP และสร้าง User
             Send-Log "Enabling Remote Desktop and creating user..."
@@ -79,10 +80,16 @@ jobs:
             $javaExe = "$javaPath\java.exe"
             if (-not (Test-Path $javaExe)) { $javaExe = "java" }
 
-            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมด (ที่มี 3 เซิร์ฟเวอร์) ลงมาที่ C:\RDPData
+            # 4. ดึงโฟลเดอร์ MEGA ทั้งหมดลงมาที่ C:\RDPData (เพิ่มการเช็กและบังคับดึงแบบระบุ Path ราก)
             Send-Log "Downloading 3 servers from MEGA..."
             cmd.exe /c "mega-get /MEGA $workDir"
-            Send-Log "All servers downloaded successfully!"
+            
+            # ตรวจสอบว่าไฟล์มาจริงไหม ถ้ายังไม่มาให้ลองซ้ำอีกรอบ
+            if (-not (Test-Path "$workDir\MEGA")) {
+                Send-Log "Retrying download from MEGA..."
+                cmd.exe /c "mega-get //MEGA $workDir"
+            }
+            Send-Log "Download process completed!"
 
             # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
             Send-Log "Starting all 3 Minecraft servers automatically..."
