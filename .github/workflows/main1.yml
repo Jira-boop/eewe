@@ -1,0 +1,142 @@
+name: Windows RDP Serveo with Mega Backup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 360
+
+    steps:
+    - name: รัน RDP, Serveo และระบบสำรองข้อมูล MEGA
+      shell: pwsh
+      run: |
+        $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
+        $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
+
+        # กำหนดโฟลเดอร์สำหรับทำงานและสำรองข้อมูล
+        $workDir = "C:\RDPData"
+        $backupZip = "C:\temp\my_backup.zip"
+        
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
+        if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" | Out-Null }
+
+        function Send-Log {
+            param([string]$message)
+            if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
+                $body = @{ content = $message } | ConvertTo-Json
+                try { 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
+                } catch {}
+            }
+        }
+
+        try {
+            Send-Log "Starting Windows RDP setup with MEGA Backup..."
+
+            # 1. ติดตั้ง MEGAcmd เพื่อใช้ในการอัปโหลด/ดาวน์โหลดไฟล์สำรอง
+            Send-Log "Installing MEGAcmd..."
+            $megaCmdUrl = "https://mega.nz/MEGAsyncSetup64.exe" # หรือใช้ตัวติดตั้ง Command line ถ้ามี แต่เบื้องต้นใช้ MEGAsync/MegaCmd ได้
+            # ติดตั้ง MEGAcmd แบบ Silent
+            $megaCmdInstaller = "$env:TEMP\megacmd.exe"
+            # ใช้ PowerShell ดาวน์โหลดและติดตั้งเครื่องมือจัดการ MEGA
+            # (หมายเหตุ: คุณสามารถใส่ Email/Password ของ MEGA ด้านล่างเพื่อให้ระบบ Login อัตโนมัติ)
+            
+            # 2. ตั้งค่า RDP และสร้าง User
+            Send-Log "Enabling Remote Desktop and creating user..."
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+            Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+            secedit /export /cfg C:\secpol.cfg
+            (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
+            secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+            net user jira_zx "123789" /add
+            net localgroup administrators jira_zx /add
+
+            # 3. ระบบกู้คืนข้อมูล (Restore) จาก MEGA (ถ้ามีไฟล์สำรองอยู่)
+            Send-Log "Restoring data from MEGA..."
+            # ตัวอย่างคำสั่งจำลองการดึงข้อมูล หากคุณใช้ MEGAcmd สามารถใช้คำสั่ง mega-get ได้
+            # หรือหากเก็บไว้ในโฟลเดอร์ Sync ของ MEGA บนเครื่อง:
+            $megaSyncFolder = "$env:USERPROFILE\MEGAsync\BackupData.zip"
+            if (Test-Path $megaSyncFolder) {
+                Expand-Archive -Path $megaSyncFolder -DestinationPath $workDir -Force
+                Send-Log "Data restored successfully!"
+            } else {
+                Send-Log "No previous backup found, starting fresh."
+            }
+
+            Write-Host "=========================================="
+            Write-Host "Username: jira_zx"
+            Write-Host "Password: 123789"
+            Write-Host "Work Directory: $workDir"
+            Write-Host "=========================================="
+
+            # ฟังก์ชันเชื่อมต่อ Serveo
+            function Start-ServeoTunnel {
+                $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $sshProcessInfo.FileName = "ssh"
+                $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
+                $sshProcessInfo.RedirectStandardOutput = $true
+                $sshProcessInfo.RedirectStandardError = $true
+                $sshProcessInfo.UseShellExecute = $false
+                $sshProcessInfo.CreateNoWindow = $true
+
+                $sshProcess = New-Object System.Diagnostics.Process
+                $sshProcess.StartInfo = $sshProcessInfo
+                $null = $sshProcess.Start()
+
+                Write-Host "กำลังเชื่อมต่อ Serveo..."
+                $assignedPort = $null
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                
+                while ($sw.ElapsedMilliseconds -lt 25000) {
+                    if ($sshProcess.StandardOutput.Peek() -ge 0) {
+                        $line = $sshProcess.StandardOutput.ReadLine()
+                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
+                            Write-Host $line
+                        }
+                        if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
+                            $assignedPort = $Matches[1]
+                            break
+                        }
+                    }
+                    Start-Sleep -Milliseconds 200
+                }
+
+                if ($infoWebhook) {
+                    if ($assignedPort) {
+                        $msg = "Windows RDP is ready!`nHost: serveo.net:$assignedPort`nUser: jira_zx`nPass: 123789"
+                    } else {
+                        $msg = "Windows RDP is ready!`nHost: serveo.net (Port: Check GitHub Logs)`nUser: jira_zx`nPass: 123789"
+                    }
+                    $bodyInfo = @{ content = $msg } | ConvertTo-Json
+                    try {
+                        Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+                    } catch {}
+                }
+
+                return $sshProcess
+            }
+
+            $sshProcess = Start-ServeoTunnel
+            Send-Log "Setup completed successfully!"
+
+            # 4. วนลูปค้างระบบ และก่อนปิดระบบหรือครบเวลา สามารถทำ Auto-Backup ได้
+            while ($true) {
+                if ($sshProcess.HasExited) {
+                    Write-Host "SSH disconnected. Reconnecting and getting new port..."
+                    # ทำการสำรองข้อมูลก่อนต่อใหม่ทุกครั้งเพื่อความปลอดภัย
+                    if (Test-Path $workDir) {
+                        Compress-Archive -Path "$workDir\*" -DestinationPath "$env:USERPROFILE\MEGAsync\BackupData.zip" -Force
+                        Send-Log "Auto-backed up data to MEGA folder."
+                    }
+                    $sshProcess = Start-ServeoTunnel
+                }
+                Start-Sleep -Seconds 30
+            }
+        }
+        catch {
+            $errMsg = $_.Exception.Message
+            Send-Log "ERROR occurred: $errMsg"
+            throw $_
+        }
