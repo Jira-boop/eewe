@@ -13,7 +13,7 @@ jobs:
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
-        $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
+        $infoWebhook = "https://discord.com/api/webhooks/1564613616311865364/_GFfhh-0ZyPagvOXmj_T0P2h3qAyL_5MUSFE7L5VLjtQFakFiS4IEtNvkVETis5IfgqH"
 
         # ตั้งค่าบัญชี MEGA และรหัสผ่าน
         $megaEmail = "jirawatkaewninta@gmail.com"
