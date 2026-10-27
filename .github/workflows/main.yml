@@ -13,7 +13,7 @@ jobs:
       shell: pwsh
       run: |
         $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
-        $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
+        $infoWebhook = "https://discord.com/api/webhooks/1564613616311865364/_GFfhh-0ZyPagvOXmj_T0P2h3qAyL_5MUSFE7L5VLjtQFakFiS4IEtNvkVETis5IfgqH"
 
         # ตั้งค่าบัญชี MEGA และรหัสผ่าน
         $megaEmail = "jirawatkaewninta@gmail.com"
@@ -143,7 +143,7 @@ jobs:
             Write-Host "Playit Path: $zPlayitDir"
             Write-Host "=========================================="
 
-            # ฟังก์ชันเชื่อมต่อ LocalTunnel สำหรับ RDP (กำหนด Subdomain ได้ เช่น jira-minecraft-rdp)
+            # ฟังก์ชันเชื่อมต่อ LocalTunnel สำหรับ RDP
             function Start-LocalTunnel {
                 $ltProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $ltProcessInfo.FileName = "npx.cmd"
@@ -191,12 +191,12 @@ jobs:
             $ltProcess = Start-LocalTunnel
             Send-Log "Setup, 3 servers and playit running successfully!"
 
-            # 8. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA เมื่อทันเนลหลุด
+            # 8. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA (แก้ไขคำสั่งให้ถูกต้อง)
             while ($true) {
                 if ($ltProcess.HasExited) {
                     Write-Host "LocalTunnel disconnected. Reconnecting and backing up to MEGA..."
                     if (Test-Path "$workDir\MEGA") {
-                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" --overwrite `"$workDir\MEGA`" /"
+                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" `"$workDir\MEGA`" /"
                         Send-Log "All servers backed up to MEGA successfully."
                     }
                     $ltProcess = Start-LocalTunnel
