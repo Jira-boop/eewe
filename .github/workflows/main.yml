@@ -1,4 +1,4 @@
-name: Windows RDP 3-Servers Minecraft & LocalTunnel
+name: Windows RDP 3-Servers Minecraft & Serveo
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
         }
 
         try {
-            Send-Log "Starting Windows RDP with LocalTunnel, 3 Minecraft Servers & MEGA..."
+            Send-Log "Starting Windows RDP with Serveo, 3 Minecraft Servers & MEGA..."
 
             # 1. ติดตั้ง MEGAcmd
             Send-Log "Installing MEGAcmd..."
@@ -65,12 +65,7 @@ jobs:
 
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 0 -ErrorAction SilentlyContinue
 
-            # 3. ติดตั้ง Node.js (จำเป็นสำหรับใช้ LocalTunnel / npx lt)
-            Send-Log "Installing Node.js..."
-            winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-            # 4. ติดตั้ง Java 25
+            # 3. ติดตั้ง Java 25
             Send-Log "Installing Java 25..."
             $javaUrl = "https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.msi"
             $javaInstaller = "$env:TEMP\java25.msi"
@@ -85,7 +80,7 @@ jobs:
             $javaExe = "$javaPath\java.exe"
             if (-not (Test-Path $javaExe)) { $javaExe = "java" }
 
-            # 5. ดึงโฟลเดอร์ MEGA ลงมาที่ C:\RDPData
+            # 4. ดึงโฟลเดอร์ MEGA ลงมาที่ C:\RDPData
             Send-Log "Downloading servers and playit from MEGA..."
             cmd.exe /c "`"$megaCmdPath\mega-get.bat`" /MEGA $workDir"
             
@@ -95,7 +90,7 @@ jobs:
             }
             Send-Log "Download process completed!"
 
-            # 6. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
+            # 5. สั่งรันทั้ง 3 เซิร์ฟเวอร์พร้อมกันอัตโนมัติ
             Send-Log "Starting all 3 Minecraft servers automatically..."
 
             # เซิร์ฟเวอร์ที่ 1: classic
@@ -124,7 +119,7 @@ jobs:
                 }
             }
 
-            # 7. สั่งรัน Playit.gg จาก C:\RDPData\MEGA\z โดยตรง
+            # 6. สั่งรัน Playit.gg จาก C:\RDPData\MEGA\z โดยตรง
             $zPlayitDir = "$workDir\MEGA\z"
             $playitExePath = "$zPlayitDir\playit.exe"
 
@@ -143,41 +138,43 @@ jobs:
             Write-Host "Playit Path: $zPlayitDir"
             Write-Host "=========================================="
 
-            # ฟังก์ชันเชื่อมต่อ LocalTunnel แบบเสถียรขึ้น
-            function Start-LocalTunnel {
-                $ltProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-                $ltProcessInfo.FileName = "npx.cmd"
-                $ltProcessInfo.Arguments = "localtunnel --port 3389 --subdomain jira-minecraft-rdp"
-                $ltProcessInfo.RedirectStandardOutput = $true
-                $ltProcessInfo.RedirectStandardError = $true
-                $ltProcessInfo.UseShellExecute = $false
-                $ltProcessInfo.CreateNoWindow = $true
+            # ฟังก์ชันเชื่อมต่อ Serveo สำหรับ RDP
+            function Start-ServeoTunnel {
+                $sshProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $sshProcessInfo.FileName = "ssh"
+                $sshProcessInfo.Arguments = "-o ServerAliveInterval=60 -o ServerAliveCountMax=10 -T -o StrictHostKeyChecking=no -R 0:localhost:3389 serveo.net"
+                $sshProcessInfo.RedirectStandardOutput = $true
+                $sshProcessInfo.RedirectStandardError = $true
+                $sshProcessInfo.UseShellExecute = $false
+                $sshProcessInfo.CreateNoWindow = $true
 
-                $ltProcess = New-Object System.Diagnostics.Process
-                $ltProcess.StartInfo = $ltProcessInfo
-                $null = $ltProcess.Start()
+                $sshProcess = New-Object System.Diagnostics.Process
+                $sshProcess.StartInfo = $sshProcessInfo
+                $null = $sshProcess.Start()
 
-                Write-Host "กำลังเชื่อมต่อ LocalTunnel..."
-                $tunnelUrl = $null
+                Write-Host "กำลังเชื่อมต่อ Serveo..."
+                $assignedPort = $null
                 $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 
-                while ($sw.ElapsedMilliseconds -lt 40000) {
-                    if ($ltProcess.StandardOutput.Peek() -ge 0) {
-                        $line = $ltProcess.StandardOutput.ReadLine()
-                        Write-Host $line
-                        if ($line -match "url: (https?://.+)") {
-                            $tunnelUrl = $Matches[1]
+                while ($sw.ElapsedMilliseconds -lt 30000) {
+                    if ($sshProcess.StandardOutput.Peek() -ge 0) {
+                        $line = $sshProcess.StandardOutput.ReadLine()
+                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
+                            Write-Host $line
+                        }
+                        if ($line -match "Forwarding TCP connections from .+?:(\d+)") {
+                            $assignedPort = $Matches[1]
                             break
                         }
                     }
-                    Start-Sleep -Milliseconds 300
+                    Start-Sleep -Milliseconds 200
                 }
 
                 if ($infoWebhook) {
-                    if ($tunnelUrl) {
-                        $msg = "Windows RDP (LocalTunnel) is ready!`nHost: $tunnelUrl`nUser: jira_zx`nPass: 123789"
+                    if ($assignedPort) {
+                        $msg = "Windows RDP is ready!`nHost: serveousercontent.com:$assignedPort`nUser: jira_zx`nPass: 123789"
                     } else {
-                        $msg = "Windows RDP (LocalTunnel) is ready!`nHost: https://jira-minecraft-rdp.loca.lt`nUser: jira_zx`nPass: 123789"
+                        $msg = "Windows RDP is ready!`nHost: serveousercontent.com (Check GitHub Logs for port)`nUser: jira_zx`nPass: 123789"
                     }
                     $bodyInfo = @{ content = $msg } | ConvertTo-Json
                     try {
@@ -185,18 +182,22 @@ jobs:
                     } catch {}
                 }
 
-                return $ltProcess
+                return $sshProcess
             }
 
-            $ltProcess = Start-LocalTunnel
+            $sshProcess = Start-ServeoTunnel
             Send-Log "Setup, 3 servers and playit running successfully!"
 
-            # 8. วนลูปสแตนด์บายพร้อมหน่วงเวลาป้องกันลูปพัง
+            # 7. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA อย่างปลอดภัย
             while ($true) {
-                if ($ltProcess.HasExited) {
-                    Write-Host "LocalTunnel disconnected. Reconnecting in 10 seconds..."
+                if ($sshProcess.HasExited) {
+                    Write-Host "SSH disconnected. Reconnecting and backing up to MEGA..."
+                    if (Test-Path "$workDir\MEGA") {
+                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" `"$workDir\MEGA`" /"
+                        Send-Log "All servers backed up to MEGA successfully."
+                    }
                     Start-Sleep -Seconds 10
-                    $ltProcess = Start-LocalTunnel
+                    $sshProcess = Start-ServeoTunnel
                 }
                 Start-Sleep -Seconds 30
             }
