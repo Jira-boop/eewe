@@ -143,7 +143,7 @@ jobs:
             Write-Host "Playit Path: $zPlayitDir"
             Write-Host "=========================================="
 
-            # ฟังก์ชันเชื่อมต่อ LocalTunnel สำหรับ RDP
+            # ฟังก์ชันเชื่อมต่อ LocalTunnel แบบเสถียรขึ้น
             function Start-LocalTunnel {
                 $ltProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $ltProcessInfo.FileName = "npx.cmd"
@@ -161,7 +161,7 @@ jobs:
                 $tunnelUrl = $null
                 $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 
-                while ($sw.ElapsedMilliseconds -lt 25000) {
+                while ($sw.ElapsedMilliseconds -lt 40000) {
                     if ($ltProcess.StandardOutput.Peek() -ge 0) {
                         $line = $ltProcess.StandardOutput.ReadLine()
                         Write-Host $line
@@ -170,14 +170,14 @@ jobs:
                             break
                         }
                     }
-                    Start-Sleep -Milliseconds 200
+                    Start-Sleep -Milliseconds 300
                 }
 
                 if ($infoWebhook) {
                     if ($tunnelUrl) {
                         $msg = "Windows RDP (LocalTunnel) is ready!`nHost: $tunnelUrl`nUser: jira_zx`nPass: 123789"
                     } else {
-                        $msg = "Windows RDP (LocalTunnel) is ready!`nHost: jira-minecraft-rdp.loca.lt`nUser: jira_zx`nPass: 123789"
+                        $msg = "Windows RDP (LocalTunnel) is ready!`nHost: https://jira-minecraft-rdp.loca.lt`nUser: jira_zx`nPass: 123789"
                     }
                     $bodyInfo = @{ content = $msg } | ConvertTo-Json
                     try {
@@ -191,14 +191,11 @@ jobs:
             $ltProcess = Start-LocalTunnel
             Send-Log "Setup, 3 servers and playit running successfully!"
 
-            # 8. วนลูปสแตนด์บายและอัปโหลดสำรองข้อมูลกลับขึ้น MEGA (แก้ไขคำสั่งให้ถูกต้อง)
+            # 8. วนลูปสแตนด์บายพร้อมหน่วงเวลาป้องกันลูปพัง
             while ($true) {
                 if ($ltProcess.HasExited) {
-                    Write-Host "LocalTunnel disconnected. Reconnecting and backing up to MEGA..."
-                    if (Test-Path "$workDir\MEGA") {
-                        cmd.exe /c "`"$megaCmdPath\mega-put.bat`" `"$workDir\MEGA`" /"
-                        Send-Log "All servers backed up to MEGA successfully."
-                    }
+                    Write-Host "LocalTunnel disconnected. Reconnecting in 10 seconds..."
+                    Start-Sleep -Seconds 10
                     $ltProcess = Start-LocalTunnel
                 }
                 Start-Sleep -Seconds 30
