@@ -66,11 +66,11 @@ jobs:
             Write-Host "Work Directory: $workDir"
             Write-Host "=========================================="
 
-            # ฟังก์ชันรัน Cloudflare Tunnel
+            # ฟังก์ชันรัน Cloudflare Tunnel แบบใช้ Token ประจำตัว
             function Start-CloudflareTunnel {
                 $cfProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $cfProcessInfo.FileName = "C:\temp\cloudflared.exe"
-                $cfProcessInfo.Arguments = "tunnel --url rdp://localhost:3389"
+                $cfProcessInfo.Arguments = "tunnel run --token eyJhIjoiaDMyMkVmOGM5YWM5ZDl0NmQ2NGUxOTUiLCJ0IjoieUpISW9pWlhtMndwMFpWb01NOHpMUG5kMWFhSkpQUTkxT1NKSldQOVNKRlB2T01OWlZqR1p3PT0ifQ=="
                 $cfProcessInfo.RedirectStandardOutput = $true
                 $cfProcessInfo.RedirectStandardError = $true
                 $cfProcessInfo.UseShellExecute = $false
@@ -80,31 +80,10 @@ jobs:
                 $cfProcess.StartInfo = $cfProcessInfo
                 $null = $cfProcess.Start()
 
-                Write-Host "กำลังเชื่อมต่อ Cloudflare Tunnel..."
-                $tunnelUrl = $null
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                Write-Host "กำลังเชื่อมต่อ Cloudflare Tunnel ด้วย Token ส่วนตัว..."
                 
-                while ($sw.ElapsedMilliseconds -lt 25000) {
-                    if ($cfProcess.StandardError.Peek() -ge 0) {
-                        $line = $cfProcess.StandardError.ReadLine()
-                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
-                            Write-Host $line
-                        }
-                        # ปรับ Regex ให้จับคู่ URL ของ trycloudflare ได้แม่นยำยิ่งขึ้น
-                        if ($line -match "(https://[a-zA-Z0-9-]+\.trycloudflare\.com)") {
-                            $tunnelUrl = $Matches[1]
-                            break
-                        }
-                    }
-                    Start-Sleep -Milliseconds 200
-                }
-
                 if ($infoWebhook) {
-                    if ($tunnelUrl) {
-                        $msg = "Windows RDP is ready!`nCloudflare URL: $tunnelUrl`nUser: jira_zx`nPass: 123789"
-                    } else {
-                        $msg = "Windows RDP is ready!`nHost: Check GitHub Logs for trycloudflare URL`nUser: jira_zx`nPass: 123789"
-                    }
+                    $msg = "Windows RDP is ready!`nTunnel connected via Named Tunnel.`nUser: jira_zx`nPass: 123789"
                     $bodyInfo = @{ content = $msg } | ConvertTo-Json
                     try {
                         Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
