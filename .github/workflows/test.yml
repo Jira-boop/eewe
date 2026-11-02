@@ -19,15 +19,15 @@ jobs:
         $workDir = "C:\RDPData"
         $backupZip = "C:\temp\my_backup.zip"
         
-        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path$workDir | Out-Null }
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
         if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" | Out-Null }
 
         function Send-Log {
             param([string]$message)
             if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
-                $body = @{ content =$message } | ConvertTo-Json
+                $body = @{ content = $message } | ConvertTo-Json
                 try { 
-                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body$body -ContentType 'application/json' 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body $body -ContentType 'application/json' 
                 } catch {}
             }
         }
@@ -40,6 +40,93 @@ jobs:
             $cloudflaredPath = "C:\temp\cloudflared.exe"
             Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile $cloudflaredPath
 
-            # 2. ตั้งค่า RDP และสร้าง User
+            # 2. ตั้งค่า RDP และสร้าง User (แก้ไขเครื่องหมายคำพูดเป็น Double quotes)
             Send-Log "Enabling Remote Desktop and creating user..."
-            Set-ItemProperty -Path 'HKLM:\System\CurrentControl
+            Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+            Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+            secedit /export /cfg C:\secpol.cfg
+            (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
+            secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+            net user jira_zx "123789" /add
+            net localgroup administrators jira_zx /add
+
+            # 3. ระบบกู้คืนข้อมูล (Restore) จาก MEGA (ถ้ามีไฟล์สำรองอยู่)
+            Send-Log "Restoring data from MEGA..."
+            $megaSyncFolder = "$env:USERPROFILE\MEGAsync\BackupData.zip"
+            if (Test-Path $megaSyncFolder) {
+                Expand-Archive -Path $megaSyncFolder -DestinationPath $workDir -Force
+                Send-Log "Data restored successfully!"
+            } else {
+                Send-Log "No previous backup found, starting fresh."
+            }
+
+            Write-Host "=========================================="
+            Write-Host "Username: jira_zx"
+            Write-Host "Password: 123789"
+            Write-Host "Work Directory: $workDir"
+            Write-Host "=========================================="
+
+            # ฟังก์ชันรัน Cloudflare Tunnel (TCP สำหรับ RDP)
+            function Start-CloudflareTunnel {
+                $cfProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $cfProcessInfo.FileName = "C:\temp\cloudflared.exe"
+                $cfProcessInfo.Arguments = "access tcp --url localhost:3389"
+                $cfProcessInfo.RedirectStandardOutput = $true
+                $cfProcessInfo.RedirectStandardError = $true
+                $cfProcessInfo.UseShellExecute = $false
+                $cfProcessInfo.CreateNoWindow = $true
+
+                $cfProcess = New-Object System.Diagnostics.Process
+                $cfProcess.StartInfo = $cfProcessInfo
+                $null = $cfProcess.Start()
+
+                Write-Host "กำลังเชื่อมต่อ Cloudflare Tunnel..."
+                $tunnelUrl = $null
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                
+                while ($sw.ElapsedMilliseconds -lt 25000) {
+                    if ($cfProcess.StandardError.Peek() -ge 0) {
+                        $line = $cfProcess.StandardError.ReadLine()
+                        if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
+                            Write-Host $line
+                        }
+                        if ($line -match "(https://[a-zA-Z0-9-]+\.trycloudflare\.com)") {
+                            $tunnelUrl = $Matches[1]
+                            break
+                        }
+                    }
+                    Start-Sleep -Milliseconds 200
+                }
+
+                if ($infoWebhook) {
+                    if ($tunnelUrl) {
+                        $msg = "Windows RDP is ready!`nCloudflare URL: $tunnelUrl`nUser: jira_zx`nPass: 123789"
+                    } else {
+                        $msg = "Windows RDP is ready!`nHost: Check GitHub Logs for trycloudflare URL`nUser: jira_zx`nPass: 123789"
+                    }
+                    $bodyInfo = @{ content = $msg } | ConvertTo-Json
+                    try {
+                        Invoke-RestMethod -Uri $infoWebhook -Method Post -Body $bodyInfo -ContentType 'application/json'
+                    } catch {}
+                }
+
+                return $cfProcess
+            }
+
+            $cfProcess = Start-CloudflareTunnel
+            Send-Log "Setup completed successfully!"
+
+            # 4. วนลูปค้างระบบ และต่อ Tunnel ใหม่ทันทีเมื่อหลุด
+            while ($true) {
+                if ($cfProcess.HasExited) {
+                    Write-Host "Cloudflare Tunnel disconnected. Reconnecting..."
+                    $cfProcess = Start-CloudflareTunnel
+                }
+                Start-Sleep -Seconds 30
+            }
+        }
+        catch {
+            $errMsg = $_.Exception.Message
+            Send-Log "ERROR occurred: $errMsg"
+            throw $_
+        }
