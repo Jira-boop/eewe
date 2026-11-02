@@ -66,7 +66,7 @@ jobs:
             Write-Host "Work Directory: $workDir"
             Write-Host "=========================================="
 
-            # ฟังก์ชันรัน Cloudflare Tunnel (แก้ไข Arguments ให้ถูกต้อง)
+            # ฟังก์ชันรัน Cloudflare Tunnel
             function Start-CloudflareTunnel {
                 $cfProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $cfProcessInfo.FileName = "C:\temp\cloudflared.exe"
@@ -90,6 +90,7 @@ jobs:
                         if ($line -notmatch "t\.me" -and $line -notmatch "A_TOOLS") {
                             Write-Host $line
                         }
+                        # ปรับ Regex ให้จับคู่ URL ของ trycloudflare ได้แม่นยำยิ่งขึ้น
                         if ($line -match "(https://[a-zA-Z0-9-]+\.trycloudflare\.com)") {
                             $tunnelUrl = $Matches[1]
                             break
