@@ -1,0 +1,45 @@
+name: Windows RDP Cloudflare Tunnel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 360
+
+    steps:
+    - name: รัน RDP, Cloudflare Tunnel และระบบกู้คืนข้อมูล
+      shell: pwsh
+      run: |
+        $logWebhook = "https://discord.com/api/webhooks/1563607634639061022/KS00fAaB5ufv4xlAulXPwPOljKxPr8HGkjjWfp5vo5cRMlhEW14m8Sp36VzuY8RC-ubR"
+        $infoWebhook = "https://discord.com/api/webhooks/1564191578665517076/P8HQRpjZcbmT9waXe2Vz8Mvbw3KJQfopqq1UcYjt97y5Ovnneipk7zvvS7Ts_tzFIHdg"
+
+        # กำหนดโฟลเดอร์สำหรับทำงานและสำรองข้อมูล
+        $workDir = "C:\RDPData"
+        $backupZip = "C:\temp\my_backup.zip"
+        
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path$workDir | Out-Null }
+        if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" | Out-Null }
+
+        function Send-Log {
+            param([string]$message)
+            if ($logWebhook -and $message -notmatch "t\.me" -and $message -notmatch "A_TOOLS") {
+                $body = @{ content =$message } | ConvertTo-Json
+                try { 
+                    Invoke-RestMethod -Uri $logWebhook -Method Post -Body$body -ContentType 'application/json' 
+                } catch {}
+            }
+        }
+
+        try {
+            Send-Log "Starting Windows RDP setup with Cloudflare Tunnel..."
+
+            # 1. ติดตั้ง Cloudflare Tunnel (cloudflared)
+            Send-Log "Installing cloudflared..."
+            $cloudflaredPath = "C:\temp\cloudflared.exe"
+            Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile $cloudflaredPath
+
+            # 2. ตั้งค่า RDP และสร้าง User
+            Send-Log "Enabling Remote Desktop and creating user..."
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControl
